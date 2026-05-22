@@ -38,12 +38,16 @@ const (
 type Task struct {
 	ID int
 	TaskType TaskType
+	FileName string
 	State Status
 	StartTime time.Time
-	FileName string
+	
 }
 
 type Reply struct {
-	Status Status
-	Error string
+	ID int
+	TaskType TaskType
+	FileName string
+	NMap int
+	NReduce int
 }
