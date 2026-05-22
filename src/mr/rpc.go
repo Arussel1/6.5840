@@ -26,8 +26,8 @@ type Status int
 type TaskType int
 const (
 	Idle Status = iota
-	Success 
-	Failure
+	InProgress
+	Completed
 )
 const (
 	Map TaskType = iota
