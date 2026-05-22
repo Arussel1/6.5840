@@ -25,11 +25,12 @@ type TaskType int
 const (
 	Success Status = iota
 	Failure 
+	Wait
+	Assigned
 )
 const (
 	Map TaskType = iota
 	Reduce 
-	Wait
 )
 type Args struct {
 	TaskID int
