@@ -1,5 +1,7 @@
 package mr
 
+import "time"
+
 //
 // RPC definitions.
 //
@@ -23,18 +25,21 @@ type ExampleReply struct {
 type Status int
 type TaskType int
 const (
-	Success Status = iota
-	Failure 
-	Wait
-	Assigned
+	Idle Status = iota
+	Success 
+	Failure
 )
 const (
 	Map TaskType = iota
 	Reduce 
+	Wait
+	Exit
 )
-type Args struct {
-	TaskID int
+type Task struct {
+	ID int
 	TaskType TaskType
+	State Status
+	StartTime time.Time
 	FileName string
 }
 
