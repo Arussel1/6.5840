@@ -1,7 +1,5 @@
 package mr
 
-import "time"
-
 //
 // RPC definitions.
 //
@@ -24,30 +22,34 @@ type ExampleReply struct {
 // Add your RPC definitions here.
 type Status int
 type TaskType int
+
 const (
-	Idle Status = iota
-	InProgress
-	Completed
+	TaskMap TaskType = iota
+	TaskReduce
+	TaskWait
+	TaskExit
 )
-const (
-	Map TaskType = iota
-	Reduce 
-	Wait
-	Exit
-)
-type Task struct {
-	ID int
-	TaskType TaskType
-	FileName string
-	State Status
-	StartTime time.Time
-	
+
+type RequestTaskArgs struct {
+	WorkerID int
 }
 
-type Reply struct {
-	ID int
+type RequestTaskReply struct {
+	TaskID   int
 	TaskType TaskType
 	FileName string
-	NMap int
-	NReduce int
+	NMap     int
+	NReduce  int
+	Version  int
+}
+
+type ReportTaskDoneArgs struct {
+	TaskType TaskType
+	TaskID   int
+	Version  int
+	WorkerID int
+}
+
+type ReportTaskDoneReply struct {
+	Accepted bool
 }
