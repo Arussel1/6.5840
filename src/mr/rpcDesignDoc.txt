@@ -1,0 +1,16 @@
+same v2
+
+
+Worker ask as a type (nothing inside) -> worker ask for work
+Master response: 
+	TaskType
+	File (string)
+	NReduce	
+	Index
+Worker response:
+	TaskType
+	Index
+Master ackloweges worker: ack ?
+
+
+Rpc
