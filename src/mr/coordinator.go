@@ -9,40 +9,16 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"rpc.go"
 )
 
-type Task struct {
-	ID        int
-	TaskType  TaskType
-	FileName  string
-	State     Status
-	StartTime time.Time
-	Version   int
-}
-
-const TIMEOUT = 15 * time.Second
-const (
-	Idle Status = iota
-	InProgress
-	Completed
-)
-
-type Phase int
-type IntermediateTaskPointer struct {
-	workerAddr string
-	fileId int
-	attempt int
-}
-type Worker struct {
-	lastHeartbeat int // Time ?
-	alive bool
+type RegisterArgs struct {
 	addr string
 }
-const (
-	PhaseMap Phase = iota
-	PhaseReduce
-	PhaseFinished
-)
+type RegisterReply struct {
+    WorkerId int
+}
 
 type Coordinator struct {
 	mu            sync.Mutex
@@ -50,7 +26,7 @@ type Coordinator struct {
 	reduceTasks   []Task
 	nReduce       int
 	mapOut        [][]IntermediateTaskPointer
-	workers        map[int]Worker
+	workers        map[int]MapReduceWorker
 	timeoutPolicy time.Duration
 	currentPhase  Phase 
 }
@@ -76,6 +52,20 @@ func (c *Coordinator) server(sockname string) {
 	}
 	go http.Serve(l, nil)
 }
+
+func (c *Coordinator) RegisterWorker(args *RegisterArgs, reply *RegisterReply) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.currentPhase == PhaseFinished {
+		return errors.New("Job already done; no new workers")
+	} else if args.addr == "" {
+		return errors.New("Please provide an Address")
+	}
+	reply.WorkerId = len(c.workers)
+	worker = new MapReduceWorker(reply.WorkerId, 0, args.addr, Idle)
+	return nil
+}
+
 
 // main/mrcoordinator.go calls Done() periodically to find out
 // if the entire job has finished.
@@ -119,7 +109,7 @@ func MakeCoordinator(sockname string, files []string, nReduce int) *Coordinator 
 			Version:   0,
 		}
 		c.mapTasks = append(c.mapTasks, *mapTask)
-
+	}
 	// Your code here.
 
 	c.server(sockname)

@@ -1,0 +1,97 @@
+v2 as well
+
+TYPE: KeyValue provided with Key and Value as string
+
+METHOD: hash provided by lab
+    call FNV algo in library
+    return a 32 bit by bitwise AND with 0x7fffffff, to remove excess Value
+
+METHOD: Map (flexible, should be injected from outside as an input)
+METHOD: Reduce(same as map above)
+
+METHOD: (name ? ) worker perform Map work:
+    Input: 
+        Map ( ? string, ? string) -> KeyValue[] ) take filename, filetext -> many pairs of KV
+        filename string
+        nreduce as an int
+        index as an int 
+    Output: boolean ? (success/failure as T/F)
+    Init a 2D slice, holding KeyValue with nReduce
+    Open file
+        if err -> return F (failure) and print error
+    Read file, store content 
+        if err -> return F and print error
+    Close file 
+    Call Map on filename, and content, store in a var
+    Divide result into nReduce bucket by iter through the var above
+    Implement atomic write by two phase writing, 
+        First write into temp
+        then call fsync to flush data to disk
+        then rename file 
+        format: X.json (x could be anything)
+METHOD (name ?) worker perform Reduce work:
+    Input:
+        Reduce ( ? string, ? string[]) -> string // Take in key, value of map output , output a combined key 
+        index (reduce index ?)
+        split (number of reduce bucket ?)
+    Output:
+        bool (T/F) for (success/failure)
+    Init a kv array
+    loop from 0 -> split and open intermidiate file
+        Open file, if error -> return false + print error
+        Decode intermediate file
+            If error , end loop
+        Append the kv decoded into kv array init above
+        Close file
+    Sort kv array to prep for reducer
+    Use two phase writing for atomic write
+        init temp -> placeholder for final result, newname, final result name
+        Open temp, if err -> return false + print err
+        remove temp with defer (to put at the end)
+        Reducing
+            loop through from start -> len kv array
+                loop through from start + 1 -> len kv array
+                    2nd continue if 2 element is equal
+                init values as an array of string ?
+                append value from start -> j
+                call Reduce to concentrate the array to string 
+                print output
+                set start = j
+        Rename oldfile to newName, 
+            if there is err, return false + print error
+        return true (success) at the end
+METHOD: Worker
+    Input: Map function, Reduce function 
+        while true ?
+            init ask_args and ask_reply ?
+            if cant call master (handle ask, arg, reply)
+                print "worker_exit"
+                call exit from os
+            if reply = none 
+                skip
+            init reponse_args and response_reply
+            if reply = map
+                if worker perform map task return no error
+                    print "Map perform successfully"
+                    response_args = map
+                    reponse_reply = index
+                    if cant call master(handle response, arg, reply)
+                    print "worker_exit"
+                    call exit from os
+                else
+                    print "task failed"
+
+            else
+                if worker perform reduce return no error
+                    print "Reudce task .... successfully"
+                    response_args = reduce
+                    reponse_reply = index
+                if cant call master (same as above)             
+                    print "worker_exit"
+                    call exit from os
+        sleep for 1 sec
+
+METHOD call provided
+METHOD call example provided
+
+

@@ -1,5 +1,7 @@
 package mr
 
+import "time"
+
 //
 // RPC definitions.
 //
@@ -18,6 +20,36 @@ type ExampleArgs struct {
 type ExampleReply struct {
 	Y int
 }
+
+type Task struct {
+	ID        int
+	TaskType  TaskType
+	FileName  string
+	State     Status
+	StartTime time.Time
+	Version   int
+}
+
+const TIMEOUT = 15 * time.Second
+const (
+	Idle Status = iota
+	InProgress
+	Completed
+)
+
+type Phase int
+type IntermediateTaskPointer struct {
+	workerAddr string
+	fileId int
+	attempt int
+}
+
+const (
+	PhaseMap Phase = iota
+	PhaseReduce
+	PhaseFinished
+)
+
 
 // Add your RPC definitions here.
 type Status int
