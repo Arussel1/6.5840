@@ -1,6 +1,9 @@
 package mr
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 //
 // RPC definitions.
@@ -22,6 +25,7 @@ type ExampleReply struct {
 }
 
 type Task struct {
+	mu 	sync.Mutex
 	ID        int
 	TaskType  TaskType
 	FileName  string
