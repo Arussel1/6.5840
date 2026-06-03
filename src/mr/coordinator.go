@@ -13,22 +13,38 @@ import (
 	"rpc.go"
 )
 
+type RPCType int
+const (
+    AskTask RPCType = iota
+    ReportDone
+)
 type RegisterArgs struct {
-	addr string
+    Type     RPCType
+    WorkerID int
+
+    // for ReportDone
+    Task     TaskType
+    TaskID   int
+    Version  int
 }
 type RegisterReply struct {
-    WorkerId int
+    Task    TaskType
+    TaskID  int
+    Attempt int
+
+    // map-only
+    File string
+
+    NMap    int
+    NReduce int
 }
 
 type Coordinator struct {
-	mu            sync.Mutex
-	mapTasks      []Task
-	reduceTasks   []Task
-	nReduce       int
-	mapOut        [][]IntermediateTaskPointer
-	workers        map[int]MapReduceWorker
-	timeoutPolicy time.Duration
-	currentPhase  Phase 
+	mu                sync.Mutex
+	mapTasks          []Task
+	reduceTasks   	  []Task
+	nReduce 	  	  int
+	nMap 		      int
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -53,17 +69,68 @@ func (c *Coordinator) server(sockname string) {
 	go http.Serve(l, nil)
 }
 
-func (c *Coordinator) RegisterWorker(args *RegisterArgs, reply *RegisterReply) error {
+func (c *Coordinator) AnswerRPC(req *RegisterArgs, res *RegisterReply) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.currentPhase == PhaseFinished {
-		return errors.New("Job already done; no new workers")
-	} else if args.addr == "" {
-		return errors.New("Please provide an Address")
+
+	mapAllDone := true
+	mapInProgress := false
+	reduceInProgress := false
+    reduceAllDone := true
+	
+	if req.Type != AskTask { return nil }
+
+	for i := 0; i < c.nMap; i++ {
+		curMapTask = &c.mapTasks[i]
+		if curMapTask.State == Idle {
+			curMapTask.Version++
+			curMapTask.State = InProgress
+			curMapTask.WorkerID = req.WorkerID
+			curMapTask.StartTime = Time.now()
+
+			res.Task = TaskMap
+			res.TaskID = i 
+			res.File = curMapTask.FileName
+			res.NReduce = c.nReduce
+			res.NMap = c.nMap
+			res.Version = curMapTask.Version
+
+			return nil
+		}
+		if curMapTask.State != Completed { mapAllDone := false }
+		if curMapTask.State == InProgress { mapInProgress := true }
 	}
-	reply.WorkerId = len(c.workers)
-	worker = new MapReduceWorker(reply.WorkerId, 0, args.addr, Idle)
-	return nil
+	if !mapAllDone {
+		res.Task = TaskWait
+		return nil
+	}
+	for i := 0, i < c.nReduce, i++ {
+			curReduceTask = &c.reduceTasks[i]
+			if curReduceTask.State == Idle {
+				curReduceTask.Version++
+				curReduceTask.State = InProgress
+				curReduceTask.WorkerID = req.WorkerID
+				curReduceTask.StartTime = Time.now()					
+
+				res.Task = TaskReduce
+				res.TaskID = i 
+				res.NReduce = c.nReduce
+				res.NMap = c.nMap
+				res.Version = curMapTask.Version
+
+				return nil
+			}
+		if curReduceTask.State != Completed { mapAllDone := false }
+		if curReduceTask.State == InProgress { mapInProgress := true }
+	}
+
+	if !reduceAllDone {
+		res.Task = TaskWait
+		return nil
+	}	
+	// no task available, set res to empty here
+	res.Task = TaskExit
+	return nil	
 }
 
 
