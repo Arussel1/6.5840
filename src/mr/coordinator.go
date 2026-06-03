@@ -8,8 +8,6 @@ import (
 	"os"
 	"sync"
 	"time"
-
-	"rpc.go"
 )
 
 type RPCType int
@@ -134,9 +132,6 @@ func (c *Coordinator) Done() bool {
 	ret := false
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.currentPhase == PhaseFinished {
-		ret = true
-	}
 
 	return ret
 }
