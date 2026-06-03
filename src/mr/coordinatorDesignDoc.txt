@@ -37,7 +37,7 @@ Mount a new "unix" port with sockname in input
 if error -> call error, else serve http traffic
 
 
-METHOD: Done () -> bool
+METHOD: Done () -> bool - DONE
 Lock master (defer Unlock)
 if nReduce == 0 return true
 else, return false
