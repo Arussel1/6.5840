@@ -5,6 +5,7 @@ import "log"
 import "net/rpc"
 import "hash/fnv"
 import "os"
+import "fsync"
 
 
 // Map functions return a slice of KeyValue.
@@ -22,6 +23,38 @@ func ihash(key string) int {
 }
 
 var coordSockName string // socket for coordinator
+
+func exeuteMap(
+		mapfunction func( string, string) KeyValue[], 
+		filename string, 
+		nReduce int, 
+		MapIndex int 
+) bool {
+	
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		log.Printf("Read file %s: %v", filename, err)
+		return false
+	}
+	keyValueList := mapfunction(filename, content)
+	os.Close(filename)
+
+	for i := 0; i <= nReduce; i++ {
+		curIntermediateContent := result[i]
+		// error handling
+		// create a temp file with name "temp-%i.txt" or something like that
+		err := os.Write("temp%i.json", curIntermediateContent, 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fsync.flush() ???
+		err := os.rename("temp%i.json", "intermediate-%i.json")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+	}
+}
 
 
 // main/mrworker.go calls this function.

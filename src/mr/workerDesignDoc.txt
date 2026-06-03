@@ -1,13 +1,13 @@
-v2 as well
+v2.1
 
-TYPE: KeyValue provided with Key and Value as string
+TYPE: KeyValue provided with Key and Value as string - PROVIDED
 
-METHOD: hash provided by lab
+METHOD: hash provided by lab - PROVIDED 
     call FNV algo in library
     return a 32 bit by bitwise AND with 0x7fffffff, to remove excess Value
 
 METHOD: Map (flexible, should be injected from outside as an input)
-METHOD: Reduce(same as map above)
+METHOD: Reduce(same as map above) - PROVIDED as input
 
 METHOD: (name ? ) worker perform Map work:
     Input: 
@@ -17,18 +17,19 @@ METHOD: (name ? ) worker perform Map work:
         index as an int 
     Output: boolean ? (success/failure as T/F)
     Init a 2D slice, holding KeyValue with nReduce
-    Open file
-        if err -> return F (failure) and print error
     Read file, store content 
         if err -> return F and print error
-    Close file 
     Call Map on filename, and content, store in a var
     Divide result into nReduce bucket by iter through the var above
     Implement atomic write by two phase writing, 
-        First write into temp
-        then call fsync to flush data to disk
-        then rename file 
-        format: X.json (x could be anything)
+        for each reducer
+            make temp file
+            Encode buckets to json with jsonEncoder + error handling
+            write buckets into temp
+            sync temp file to disk
+            close temp file
+            then rename file  to final
+            format: X.json (x could be anything)
 METHOD (name ?) worker perform Reduce work:
     Input:
         Reduce ( ? string, ? string[]) -> string // Take in key, value of map output , output a combined key 
