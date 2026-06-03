@@ -55,14 +55,22 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 
 // start a thread that listens for RPCs from worker.go
 func (c *Coordinator) server(sockname string) {
-	rpc.Register(c)
+	err := rpc.Register(c)
+	if err != nil {
+		log.Fatalf("Cannot register server %v", err)
+	}
 	rpc.HandleHTTP()
 	os.Remove(sockname)
-	l, e := net.Listen("unix", sockname)
-	if e != nil {
-		log.Fatalf("listen error %s: %v", sockname, e)
+	l, err := net.Listen("unix", sockname)
+	if err != nil {
+		log.Fatalf("listen error %s: %v", sockname, err)
 	}
-	go http.Serve(l, nil)
+	go func() {
+		err := http.Serve(l, nil)
+		if err != nil {
+		log.Printf("Cannot serve http %v", err)
+		}
+	}()
 }
 
 func (c *Coordinator) AnswerRPC(req *RegisterArgs, res *RegisterReply) error {
@@ -124,6 +132,7 @@ func (c *Coordinator) AnswerRPC(req *RegisterArgs, res *RegisterReply) error {
 	res.Task = TaskExit
 	return nil	
 }
+
 
 
 // main/mrcoordinator.go calls Done() periodically to find out

@@ -18,7 +18,7 @@ else move on to reduce task, repeat as above
 else return not possible
 
 
-METHOD: Lease control RPC (req,rep) -> error
+METHOD: Lease control RPC (req,rep) -> error - OPTIONAL for now ? Maybe later
 Start a timer from now
 Before 15 seconds went
 If tasked is completed
@@ -29,7 +29,7 @@ if task type:
 if task is map -> nMap -=1 
 else -> nReduce -=1 
 
-METHOD: server RPC? (string) -> error ? (should always return an error tho, isn't it) 
+METHOD: server RPC? (string) -> error ? - DONE
 Register MASTER as an rpc handlers 
 Mount rpc to HTTP methods and paths
 Remove socket from OS to mount the same port
