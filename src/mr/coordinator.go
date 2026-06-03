@@ -1,7 +1,6 @@
 package mr
 
 import (
-	"errors"
 	"log"
 	"net"
 	"net/http"
@@ -116,7 +115,7 @@ func (c *Coordinator) AnswerRPC(req *RegisterArgs, res *RegisterReply) error {
 
 				return nil
 			}
-		if curReduceTask.State != Completed { mapAllDreduceAllDoneone = false }
+		if curReduceTask.State != Completed { reduceAllDone = false }
 	}
 
 	if !reduceAllDone {
@@ -142,36 +141,12 @@ func (c *Coordinator) Done() bool {
 	return ret
 }
 
-func (c *Coordinator) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) error {
-	if args == nil {
-		return errors.New("nil args")
-	}
-	if reply == nil {
-		return errors.New("nil reply")
-	}
-
-	return nil
-}
-
 // create a Coordinator.
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
 func MakeCoordinator(sockname string, files []string, nReduce int) *Coordinator {
 	c := Coordinator{}
-	c.currentPhase = PhaseMap
-	c.timeoutPolicy = TIMEOUT
-	c.nReduce = nReduce
-	for i := range files {
-		mapTask := &Task{
-			ID:        i,
-			TaskType:  TaskMap,
-			FileName:  files[i],
-			State:     Idle,
-			StartTime: time.Time{},
-			Version:   0,
-		}
-		c.mapTasks = append(c.mapTasks, *mapTask)
-	}
+	
 	// Your code here.
 
 	c.server(sockname)
