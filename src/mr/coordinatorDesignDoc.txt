@@ -42,12 +42,12 @@ Lock master (defer Unlock)
 if nReduce == 0 return true
 else, return false
 
-METHOD: master constructor (files, nReduce) -> a pointer to Master
+METHOD: master constructor (files, nReduce) -> a pointer to Master - DONE
 Create a empty Master
 create map tasks list: empty for now, length is length of files
 create reduce tasks list: empty for now, length is nReduce (demonstrate how many reduce bucket)
 Create lock with mutex
-nMap = len(files), account for map remain
+nMap = len(files), account for map 
 nReduce = nReduce, account for buckets
 
 loop throughs file, for each file
