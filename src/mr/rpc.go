@@ -28,6 +28,7 @@ type Task struct {
 	State     Status
 	StartTime time.Time
 	Version   int
+	WorkerID int
 }
 
 const TIMEOUT = 15 * time.Second
@@ -37,18 +38,12 @@ const (
 	Completed
 )
 
-type Phase int
 type IntermediateTaskPointer struct {
 	workerAddr string
 	fileId int
 	attempt int
 }
 
-const (
-	PhaseMap Phase = iota
-	PhaseReduce
-	PhaseFinished
-)
 
 
 // Add your RPC definitions here.

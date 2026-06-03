@@ -25,12 +25,11 @@ type RegisterArgs struct {
     // for ReportDone
     Task     TaskType
     TaskID   int
-    Version  int
 }
 type RegisterReply struct {
     Task    TaskType
     TaskID  int
-    Attempt int
+    Version int
 
     // map-only
     File string
@@ -74,19 +73,17 @@ func (c *Coordinator) AnswerRPC(req *RegisterArgs, res *RegisterReply) error {
 	defer c.mu.Unlock()
 
 	mapAllDone := true
-	mapInProgress := false
-	reduceInProgress := false
     reduceAllDone := true
 	
 	if req.Type != AskTask { return nil }
 
 	for i := 0; i < c.nMap; i++ {
-		curMapTask = &c.mapTasks[i]
+		curMapTask := &c.mapTasks[i]
 		if curMapTask.State == Idle {
 			curMapTask.Version++
 			curMapTask.State = InProgress
 			curMapTask.WorkerID = req.WorkerID
-			curMapTask.StartTime = Time.now()
+			curMapTask.StartTime = time.Now()
 
 			res.Task = TaskMap
 			res.TaskID = i 
@@ -97,31 +94,29 @@ func (c *Coordinator) AnswerRPC(req *RegisterArgs, res *RegisterReply) error {
 
 			return nil
 		}
-		if curMapTask.State != Completed { mapAllDone := false }
-		if curMapTask.State == InProgress { mapInProgress := true }
+		if curMapTask.State != Completed { mapAllDone = false }
 	}
-	if !mapAllDone {
+	if !mapAllDone{
 		res.Task = TaskWait
 		return nil
 	}
-	for i := 0, i < c.nReduce, i++ {
-			curReduceTask = &c.reduceTasks[i]
+	for i := 0; i < c.nReduce; i++ {
+			curReduceTask := &c.reduceTasks[i]
 			if curReduceTask.State == Idle {
 				curReduceTask.Version++
 				curReduceTask.State = InProgress
 				curReduceTask.WorkerID = req.WorkerID
-				curReduceTask.StartTime = Time.now()					
+				curReduceTask.StartTime = time.Now()					
 
 				res.Task = TaskReduce
 				res.TaskID = i 
 				res.NReduce = c.nReduce
 				res.NMap = c.nMap
-				res.Version = curMapTask.Version
+				res.Version = curReduceTask.Version
 
 				return nil
 			}
-		if curReduceTask.State != Completed { mapAllDone := false }
-		if curReduceTask.State == InProgress { mapInProgress := true }
+		if curReduceTask.State != Completed { mapAllDreduceAllDoneone = false }
 	}
 
 	if !reduceAllDone {
