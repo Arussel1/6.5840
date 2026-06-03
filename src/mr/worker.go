@@ -1,12 +1,13 @@
 package mr
 
-import "fmt"
-import "log"
-import "net/rpc"
-import "hash/fnv"
-import "os"
-import "fsync"
-
+import (
+	"encoding/json"
+	"fmt"
+	"hash/fnv"
+	"log"
+	"net/rpc"
+	"os"
+)
 
 // Map functions return a slice of KeyValue.
 type KeyValue struct {
@@ -24,11 +25,11 @@ func ihash(key string) int {
 
 var coordSockName string // socket for coordinator
 
-func exeuteMap(
-		mapfunction func( string, string) KeyValue[], 
+func executeMap(
+		mapfunction func( string, string) []KeyValue, 
 		filename string, 
 		nReduce int, 
-		MapIndex int 
+		MapIndex int, 
 ) bool {
 	
 	content, err := os.ReadFile(filename)
@@ -36,24 +37,49 @@ func exeuteMap(
 		log.Printf("Read file %s: %v", filename, err)
 		return false
 	}
-	keyValueList := mapfunction(filename, content)
-	os.Close(filename)
 
-	for i := 0; i <= nReduce; i++ {
-		curIntermediateContent := result[i]
-		// error handling
-		// create a temp file with name "temp-%i.txt" or something like that
-		err := os.Write("temp%i.json", curIntermediateContent, 0644)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fsync.flush() ???
-		err := os.rename("temp%i.json", "intermediate-%i.json")
-		if err != nil {
-			log.Fatal(err)
-		}
+	keyValueList := mapfunction(filename, string(content))
+	buckets := make([][]KeyValue, nReduce)
 
+	for  _, kv := range keyValueList {
+		r := ihash(kv.Key) % nReduce
+		buckets[r] = append(buckets[r],kv)
 	}
+	for i := 0; i < nReduce; i++ {
+
+		tempFileName := fmt.Sprintf("temp-%d-%d*.json", MapIndex, i)
+		f, err := os.CreateTemp(".", tempFileName)
+		if err != nil {
+			log.Printf("Create file: %v", err)
+			return false
+		}
+
+		encoder := json.NewEncoder(f)
+		err = encoder.Encode(buckets[i])
+		if err != nil {
+			f.Close()
+			os.Remove(f.Name())
+			log.Printf("Encode file: %v", err)
+			return false
+		}
+
+		err = f.Close()
+		if err != nil {
+			os.Remove(f.Name())
+			log.Printf("Close file: %v", err)
+			return false
+		}
+		newName := fmt.Sprintf("mr-%d-%d",MapIndex,i)
+		err = os.Rename(f.Name(), newName)
+		if err != nil {
+			os.Remove(f.Name())
+			log.Printf("Rename file: %v", err)
+			return false
+		}
+		
+		log.Printf("File created: %s", newName)
+	}
+	return true
 }
 
 
