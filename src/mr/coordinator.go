@@ -138,11 +138,15 @@ func (c *Coordinator) AnswerRPC(req *RegisterArgs, res *RegisterReply) error {
 // main/mrcoordinator.go calls Done() periodically to find out
 // if the entire job has finished.
 func (c *Coordinator) Done() bool {
-	ret := false
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	return ret
+	for i := 0; i < c.nReduce; i++ {
+		curReduceTask := &c.reduceTasks[i]
+		if curReduceTask.State != Completed {
+			return false
+		}
+	}
+	return true
 }
 
 // create a Coordinator.
