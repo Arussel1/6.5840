@@ -2,7 +2,7 @@ v2 because v1 is not enough so I throw it away
 Master 
 
 
-What is inside ?
+What is inside ? - DONE
 
 mu (one mutex)
 nReduce (R), nMap (M)
@@ -11,7 +11,7 @@ reduceTasks[R]: {state, workerId, startTime, attempt}
 
 Main mission:
 
-METHOD: Answer RPC (req, rep) -> error
+METHOD: Answer RPC (req, rep) -> error -  DONE
 Answer question from worker, if worker ask for task, if possible, give a task to them, if not, then tell them it is not possible
 map task check first, if there is map task -> assign it to worker
 else move on to reduce task, repeat as above
