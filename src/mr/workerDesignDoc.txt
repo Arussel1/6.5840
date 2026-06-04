@@ -9,7 +9,7 @@ METHOD: hash provided by lab - PROVIDED
 METHOD: Map (flexible, should be injected from outside as an input)
 METHOD: Reduce(same as map above) - PROVIDED as input
 
-METHOD: (name ? ) worker perform Map work:
+METHOD: (name ? ) worker perform Map work: - DONE
     Input: 
         Map ( ? string, ? string) -> KeyValue[] ) take filename, filetext -> many pairs of KV
         filename string
@@ -43,8 +43,8 @@ METHOD (name ?) worker perform Reduce work:
         Decode intermediate file
             If error , end loop
         Append the kv decoded into kv array init above
-        Close file
-    Sort kv array to prep for reducer
+        Close file 
+    Sort kv array to prep for reducer --- 
     Use two phase writing for atomic write
         init temp -> placeholder for final result, newname, final result name
         Open temp, if err -> return false + print err

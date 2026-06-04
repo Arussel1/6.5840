@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"log"
 	"net/rpc"
 	"os"
+	"sort"
 )
 
 // Map functions return a slice of KeyValue.
@@ -26,10 +28,10 @@ func ihash(key string) int {
 var coordSockName string // socket for coordinator
 
 func executeMap(
-		mapfunction func( string, string) []KeyValue, 
-		filename string, 
-		nReduce int, 
-		MapIndex int, 
+	mapfunction func( string, string) []KeyValue, 
+	filename string, 
+	nReduce int, 
+	MapIndex int, 
 ) bool {
 	
 	content, err := os.ReadFile(filename)
@@ -69,6 +71,7 @@ func executeMap(
 			log.Printf("Close file: %v", err)
 			return false
 		}
+
 		newName := fmt.Sprintf("mr-%d-%d",MapIndex,i)
 		err = os.Rename(f.Name(), newName)
 		if err != nil {
@@ -76,11 +79,103 @@ func executeMap(
 			log.Printf("Rename file: %v", err)
 			return false
 		}
-		
+
 		log.Printf("File created: %s", newName)
 	}
 	return true
 }
+
+func executeReduce(
+    reducefunction func(string, []string) string,
+    ReduceIndex int,
+    split int,
+) bool {
+    var keyValueList []KeyValue
+
+    for i := 0; i < split; i++ {
+        name := fmt.Sprintf("mr-%d-%d", i, ReduceIndex)
+
+        file, err := os.Open(name)
+        if err != nil {
+            log.Printf("Open file %s: %v", name, err)
+            return false
+        }
+
+        decoder := json.NewDecoder(file)
+        for {
+            var kv KeyValue
+            err := decoder.Decode(&kv)
+            if err == io.EOF {
+                break
+            }
+            if err != nil {
+                file.Close()
+                log.Printf("Decode file %s: %v", name, err)
+                return false
+            }
+
+            keyValueList = append(keyValueList, kv)
+        }
+
+        if err := file.Close(); err != nil {
+            log.Printf("Close file %s: %v", name, err)
+            return false
+        }
+    }
+
+    sort.Slice(keyValueList, func(i int, j int) bool {
+        return keyValueList[i].Key < keyValueList[j].Key
+    })
+
+    tempFileName := fmt.Sprintf("temp-out-%d-*", ReduceIndex)
+
+    file, err := os.CreateTemp(".", tempFileName)
+    if err != nil {
+        log.Printf("Create file %s: %v", tempFileName, err)
+        return false
+    }
+
+    i := 0
+    for i < len(keyValueList) {
+        j := i + 1
+
+        for j < len(keyValueList) && keyValueList[j].Key == keyValueList[i].Key {
+            j++
+        }
+
+        var values []string
+        for k := i; k < j; k++ {
+            values = append(values, keyValueList[k].Value)
+        }
+
+        result := reducefunction(keyValueList[i].Key, values)
+
+        if _, err := fmt.Fprintf(file, "%v %v\n", keyValueList[i].Key, result); err != nil {
+            file.Close()
+            log.Printf("Write reduce output: %v", err)
+            return false
+        }
+
+        i = j
+    }
+
+    tempName := file.Name()
+
+    if err := file.Close(); err != nil {
+        log.Printf("Close file %s: %v", tempName, err)
+        return false
+    }
+
+    newName := fmt.Sprintf("mr-out-%d", ReduceIndex)
+
+    if err := os.Rename(tempName, newName); err != nil {
+        log.Printf("Rename %s to %s: %v", tempName, newName, err)
+        return false
+    }
+
+    return true
+}
+
 
 
 // main/mrworker.go calls this function.
