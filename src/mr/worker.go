@@ -9,6 +9,7 @@ import (
 	"net/rpc"
 	"os"
 	"sort"
+	"time"
 )
 
 // Map functions return a slice of KeyValue.
@@ -49,7 +50,7 @@ func executeMap(
 	}
 	for i := 0; i < nReduce; i++ {
 
-		tempFileName := fmt.Sprintf("temp-%d-%d*.json", MapIndex, i)
+		tempFileName := fmt.Sprintf("temp-%d-%d-*.json", MapIndex, i)
 		f, err := os.CreateTemp(".", tempFileName)
 		if err != nil {
 			log.Printf("Create file: %v", err)
@@ -57,43 +58,48 @@ func executeMap(
 		}
 
 		encoder := json.NewEncoder(f)
-		err = encoder.Encode(buckets[i])
-		if err != nil {
-			f.Close()
-			os.Remove(f.Name())
-			log.Printf("Encode file: %v", err)
-			return false
-		}
+        for _, kv := range buckets[i] {
+            err = encoder.Encode(&kv)
+            if err != nil {
+                f.Close()
+                os.Remove(f.Name())
+                log.Printf("Encode key/value: %v", err)
+                return false
+            }
+        }
 
-		err = f.Close()
-		if err != nil {
-			os.Remove(f.Name())
-			log.Printf("Close file: %v", err)
-			return false
-		}
+        tempName := f.Name()
 
-		newName := fmt.Sprintf("mr-%d-%d",MapIndex,i)
-		err = os.Rename(f.Name(), newName)
-		if err != nil {
-			os.Remove(f.Name())
-			log.Printf("Rename file: %v", err)
-			return false
-		}
+        err = f.Close()
+        if err != nil {
+            os.Remove(tempName)
+            log.Printf("Close file: %v", err)
+            return false
+        }
 
-		log.Printf("File created: %s", newName)
-	}
+        newName := fmt.Sprintf("mr-%d-%d", MapIndex, i)
+
+        err = os.Rename(tempName, newName)
+        if err != nil {
+            os.Remove(tempName)
+            log.Printf("Rename file: %v", err)
+            return false
+        }
+
+        log.Printf("File created: %s", newName)
+    }
 	return true
 }
 
 func executeReduce(
     reducefunction func(string, []string) string,
-    ReduceIndex int,
+    reduceIndex int,
     split int,
 ) bool {
     var keyValueList []KeyValue
 
     for i := 0; i < split; i++ {
-        name := fmt.Sprintf("mr-%d-%d", i, ReduceIndex)
+        name := fmt.Sprintf("mr-%d-%d", i, reduceIndex)
 
         file, err := os.Open(name)
         if err != nil {
@@ -127,9 +133,9 @@ func executeReduce(
         return keyValueList[i].Key < keyValueList[j].Key
     })
 
-    tempFileName := fmt.Sprintf("temp-out-%d-*", ReduceIndex)
+    tempFileName := fmt.Sprintf("temp-out-%d-*", reduceIndex)
 
-    file, err := os.CreateTemp(".", tempFileName)
+    f, err := os.CreateTemp(".", tempFileName)
     if err != nil {
         log.Printf("Create file %s: %v", tempFileName, err)
         return false
@@ -150,8 +156,8 @@ func executeReduce(
 
         result := reducefunction(keyValueList[i].Key, values)
 
-        if _, err := fmt.Fprintf(file, "%v %v\n", keyValueList[i].Key, result); err != nil {
-            file.Close()
+        if _, err := fmt.Fprintf(f, "%v %v\n", keyValueList[i].Key, result); err != nil {
+            os.Remove(tempFileName)
             log.Printf("Write reduce output: %v", err)
             return false
         }
@@ -159,16 +165,18 @@ func executeReduce(
         i = j
     }
 
-    tempName := file.Name()
+    tempName := f.Name()
 
-    if err := file.Close(); err != nil {
+    if err := f.Close(); err != nil {
+		os.Remove(tempName)
         log.Printf("Close file %s: %v", tempName, err)
         return false
     }
 
-    newName := fmt.Sprintf("mr-out-%d", ReduceIndex)
+    newName := fmt.Sprintf("mr-out-%d", reduceIndex)
 
     if err := os.Rename(tempName, newName); err != nil {
+		os.Remove(tempName)
         log.Printf("Rename %s to %s: %v", tempName, newName, err)
         return false
     }
@@ -178,17 +186,56 @@ func executeReduce(
 
 
 
-// main/mrworker.go calls this function.
-func Worker(sockname string, mapf func(string, string) []KeyValue,
-	reducef func(string, []string) string) {
+func Worker(
+    sockname string,
+    mapf func(string, string) []KeyValue,
+    reducef func(string, []string) string,
+) {
+    coordSockName = sockname
 
-	coordSockName = sockname
+    for {
+        askArgs := AskTaskArgs{}
+        askReply := AskTaskReply{}
 
-	// Your worker implementation here.
+        if !call("Coordinator.AskTask", &askArgs, &askReply) {
+            log.Printf("Worker exit")
+            return
+        }
 
-	// uncomment to send the Example RPC to the coordinator.
-	// CallExample()
+        switch askReply.TaskType {
+        case TaskWait:
+            time.Sleep(time.Second)
 
+        case TaskExit:
+            return
+
+        case TaskMap:
+            ok := executeMap(mapf, askReply.Filename, askReply.NReduce, askReply.TaskIndex)
+            if ok {
+                reportDoneArgs := ReportTaskDoneArgs{
+                    TaskType: TaskMap,
+                    TaskID:   askReply.TaskIndex,
+                    Version:  askReply.Version,
+                }
+                reportDoneReply := ReportTaskDoneReply{}
+
+                call("Coordinator.ReportTaskDone", &reportDoneArgs, &reportDoneReply)
+            }
+
+        case TaskReduce:
+            ok := executeReduce(reducef, askReply.TaskIndex, askReply.NMap)
+            if ok {
+                reportDoneArgs := ReportTaskDoneArgs{
+                    TaskType: TaskReduce,
+                    TaskID:   askReply.TaskIndex,
+                    Version:  askReply.Version,
+                }
+                reportDoneReply := ReportTaskDoneReply{}
+
+                call("Coordinator.ReportTaskDone", &reportDoneArgs, &reportDoneReply)
+            }
+        }
+    }
 }
 
 // example function to show how to make an RPC call to the coordinator.
