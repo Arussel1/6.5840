@@ -15,25 +15,6 @@ const (
     AskTask RPCType = iota
     ReportDone
 )
-type RegisterArgs struct {
-    Type     RPCType
-    WorkerID int
-
-    // for ReportDone
-    Task     TaskType
-    TaskID   int
-}
-type RegisterReply struct {
-    Task    TaskType
-    TaskID  int
-    Version int
-
-    // map-only
-    File string
-
-    NMap    int
-    NReduce int
-}
 
 type Coordinator struct {
 	mu                sync.Mutex
@@ -51,6 +32,126 @@ type Coordinator struct {
 func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 	reply.Y = args.X + 1
 	return nil
+}
+
+func (c *Coordinator) AskTask(args *AskTaskArgs, reply *AskTaskReply) error {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+
+    c.resetTimedOutTasks()
+
+    if !c.allMapsDone() {
+        c.assignTask(c.mapTasks, TaskMap, reply)
+        return nil
+    }
+
+    if !c.allReducesDone() {
+        c.assignTask(c.reduceTasks, TaskReduce, reply)
+        return nil
+    }
+
+    reply.TaskType = TaskExit
+    return nil
+}
+
+func (c *Coordinator) ReportTaskDone(args *ReportTaskDoneArgs, reply *ReportTaskDoneReply) error {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+
+    var tasks []Task
+
+    if args.TaskType == TaskMap {
+        tasks = c.mapTasks
+    } else if args.TaskType == TaskReduce {
+        tasks = c.reduceTasks
+    } else {
+        reply.Accepted = false
+        return nil
+    }
+
+    if args.TaskID < 0 || args.TaskID >= len(tasks) {
+        reply.Accepted = false
+        return nil
+    }
+
+    task := &tasks[args.TaskID]
+
+    if task.State == InProgress && task.Version == args.Version {
+        task.State = Completed
+        reply.Accepted = true
+        return nil
+    }
+
+    reply.Accepted = false
+    return nil
+}
+
+func (c *Coordinator) assignTask(tasks []Task, taskType TaskType, reply *AskTaskReply) {
+    for i := range tasks {
+        task := &tasks[i]
+
+        if task.State == Idle {
+            task.State = InProgress
+            task.StartTime = time.Now()
+            task.Version++
+
+            reply.TaskType = taskType
+            reply.TaskID = task.ID
+            reply.Filename = task.FileName
+            reply.NMap = c.nMap
+            reply.NReduce = c.nReduce
+            reply.Version = task.Version
+            return
+        }
+    }
+
+    reply.TaskType = TaskWait
+}
+
+
+func (c *Coordinator) resetTimedOutTasks() {
+    now := time.Now()
+
+    for i := range c.mapTasks {
+        task := &c.mapTasks[i]
+        if task.State == InProgress && now.Sub(task.StartTime) > TIMEOUT {
+            task.State = Idle
+        }
+    }
+
+    for i := range c.reduceTasks {
+        task := &c.reduceTasks[i]
+        if task.State == InProgress && now.Sub(task.StartTime) > TIMEOUT {
+            task.State = Idle
+        }
+    }
+}
+
+func (c *Coordinator) allMapsDone() bool {
+	    for i := 0; i < c.nMap; i++ {
+        if c.mapTasks[i].State != Completed {
+            return false
+        }
+    }
+	return true
+}
+
+func (c *Coordinator) allReducesDone() bool {
+	    for i := 0; i < c.nReduce; i++ {
+        if c.reduceTasks[i].State != Completed {
+            return false
+        }
+    }
+	return true
+}
+
+// main/mrcoordinator.go calls Done() periodically to find out
+// if the entire job has finished.
+func (c *Coordinator) Done() bool {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+
+    return c.allReducesDone()
 }
 
 // start a thread that listens for RPCs from worker.go
@@ -73,82 +174,6 @@ func (c *Coordinator) server(sockname string) {
 	}()
 }
 
-func (c *Coordinator) AnswerRPC(req *RegisterArgs, res *RegisterReply) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	mapAllDone := true
-    reduceAllDone := true
-	
-	if req.Type != AskTask { return nil }
-
-	for i := 0; i < c.nMap; i++ {
-		curMapTask := &c.mapTasks[i]
-		if curMapTask.State == Idle {
-			curMapTask.Version++
-			curMapTask.State = InProgress
-			curMapTask.WorkerID = req.WorkerID
-			curMapTask.StartTime = time.Now()
-
-			res.Task = TaskMap
-			res.TaskID = i 
-			res.File = curMapTask.FileName
-			res.NReduce = c.nReduce
-			res.NMap = c.nMap
-			res.Version = curMapTask.Version
-
-			return nil
-		}
-		if curMapTask.State != Completed { mapAllDone = false }
-	}
-	if !mapAllDone{
-		res.Task = TaskWait
-		return nil
-	}
-	for i := 0; i < c.nReduce; i++ {
-			curReduceTask := &c.reduceTasks[i]
-			if curReduceTask.State == Idle {
-				curReduceTask.Version++
-				curReduceTask.State = InProgress
-				curReduceTask.WorkerID = req.WorkerID
-				curReduceTask.StartTime = time.Now()					
-
-				res.Task = TaskReduce
-				res.TaskID = i 
-				res.NReduce = c.nReduce
-				res.NMap = c.nMap
-				res.Version = curReduceTask.Version
-
-				return nil
-			}
-		if curReduceTask.State != Completed { reduceAllDone = false }
-	}
-
-	if !reduceAllDone {
-		res.Task = TaskWait
-		return nil
-	}	
-	// no task available, set res to empty here
-	res.Task = TaskExit
-	return nil	
-}
-
-
-
-// main/mrcoordinator.go calls Done() periodically to find out
-// if the entire job has finished.
-func (c *Coordinator) Done() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for i := 0; i < c.nReduce; i++ {
-		curReduceTask := &c.reduceTasks[i]
-		if curReduceTask.State != Completed {
-			return false
-		}
-	}
-	return true
-}
-
 // create a Coordinator.
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
@@ -159,12 +184,13 @@ func MakeCoordinator(sockname string, files []string, nReduce int) *Coordinator 
 	c := Coordinator{
 		nMap: lenFiles,
 		nReduce: nReduce,
-		mapTasks: make([]Task,lenFiles),
-		reduceTasks: make([]Task,nReduce),
+		mapTasks: make([]Task, lenFiles),
+		reduceTasks: make([]Task, nReduce),
 	}
 
 	for i := 0; i < lenFiles; i++ {
 		c.mapTasks[i] = Task{
+			ID: i,
 			State: Idle,
 			FileName: files[i],
 			TaskType: TaskMap,
@@ -173,6 +199,7 @@ func MakeCoordinator(sockname string, files []string, nReduce int) *Coordinator 
 
 	for i := 0; i < nReduce; i++ {
 		c.reduceTasks[i] = Task {
+			ID: i,
 			State: Idle,
 			TaskType: TaskReduce,
 		}
