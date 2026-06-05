@@ -1,7 +1,6 @@
 package mr
 
 import (
-	"errors"
 	"log"
 	"net"
 	"net/http"
@@ -9,26 +8,20 @@ import (
 	"os"
 	"sync"
 	"time"
-
-	"rpc.go"
 )
 
-type RegisterArgs struct {
-	addr string
-}
-type RegisterReply struct {
-    WorkerId int
-}
+type RPCType int
+const (
+    AskTask RPCType = iota
+    ReportDone
+)
 
 type Coordinator struct {
-	mu            sync.Mutex
-	mapTasks      []Task
-	reduceTasks   []Task
-	nReduce       int
-	mapOut        [][]IntermediateTaskPointer
-	workers        map[int]MapReduceWorker
-	timeoutPolicy time.Duration
-	currentPhase  Phase 
+	mu                sync.Mutex
+	mapTasks          []Task
+	reduceTasks   	  []Task
+	nReduce 	  	  int
+	nMap 		      int
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -41,76 +34,176 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 	return nil
 }
 
-// start a thread that listens for RPCs from worker.go
-func (c *Coordinator) server(sockname string) {
-	rpc.Register(c)
-	rpc.HandleHTTP()
-	os.Remove(sockname)
-	l, e := net.Listen("unix", sockname)
-	if e != nil {
-		log.Fatalf("listen error %s: %v", sockname, e)
-	}
-	go http.Serve(l, nil)
+func (c *Coordinator) AskTask(args *AskTaskArgs, reply *AskTaskReply) error {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+
+    c.resetTimedOutTasks()
+
+    if !c.allMapsDone() {
+        c.assignTask(c.mapTasks, TaskMap, reply)
+        return nil
+    }
+
+    if !c.allReducesDone() {
+        c.assignTask(c.reduceTasks, TaskReduce, reply)
+        return nil
+    }
+
+    reply.TaskType = TaskExit
+    return nil
 }
 
-func (c *Coordinator) RegisterWorker(args *RegisterArgs, reply *RegisterReply) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.currentPhase == PhaseFinished {
-		return errors.New("Job already done; no new workers")
-	} else if args.addr == "" {
-		return errors.New("Please provide an Address")
-	}
-	reply.WorkerId = len(c.workers)
-	worker = new MapReduceWorker(reply.WorkerId, 0, args.addr, Idle)
-	return nil
+func (c *Coordinator) ReportTaskDone(args *ReportTaskDoneArgs, reply *ReportTaskDoneReply) error {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+
+    var tasks []Task
+
+    if args.TaskType == TaskMap {
+        tasks = c.mapTasks
+    } else if args.TaskType == TaskReduce {
+        tasks = c.reduceTasks
+    } else {
+        reply.Accepted = false
+        return nil
+    }
+
+    if args.TaskID < 0 || args.TaskID >= len(tasks) {
+        reply.Accepted = false
+        return nil
+    }
+
+    task := &tasks[args.TaskID]
+
+    if task.State == InProgress && task.Version == args.Version {
+        task.State = Completed
+        reply.Accepted = true
+        return nil
+    }
+
+    reply.Accepted = false
+    return nil
 }
 
+func (c *Coordinator) assignTask(tasks []Task, taskType TaskType, reply *AskTaskReply) {
+    for i := range tasks {
+        task := &tasks[i]
+
+        if task.State == Idle {
+            task.State = InProgress
+            task.StartTime = time.Now()
+            task.Version++
+
+            reply.TaskType = taskType
+            reply.TaskID = task.ID
+            reply.Filename = task.FileName
+            reply.NMap = c.nMap
+            reply.NReduce = c.nReduce
+            reply.Version = task.Version
+            return
+        }
+    }
+
+    reply.TaskType = TaskWait
+}
+
+
+func (c *Coordinator) resetTimedOutTasks() {
+    now := time.Now()
+
+    for i := range c.mapTasks {
+        task := &c.mapTasks[i]
+        if task.State == InProgress && now.Sub(task.StartTime) > TIMEOUT {
+            task.State = Idle
+        }
+    }
+
+    for i := range c.reduceTasks {
+        task := &c.reduceTasks[i]
+        if task.State == InProgress && now.Sub(task.StartTime) > TIMEOUT {
+            task.State = Idle
+        }
+    }
+}
+
+func (c *Coordinator) allMapsDone() bool {
+	    for i := 0; i < c.nMap; i++ {
+        if c.mapTasks[i].State != Completed {
+            return false
+        }
+    }
+	return true
+}
+
+func (c *Coordinator) allReducesDone() bool {
+	    for i := 0; i < c.nReduce; i++ {
+        if c.reduceTasks[i].State != Completed {
+            return false
+        }
+    }
+	return true
+}
 
 // main/mrcoordinator.go calls Done() periodically to find out
 // if the entire job has finished.
 func (c *Coordinator) Done() bool {
-	ret := false
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.currentPhase == PhaseFinished {
-		ret = true
-	}
+    c.mu.Lock()
+    defer c.mu.Unlock()
 
-	return ret
+    return c.allReducesDone()
 }
 
-func (c *Coordinator) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) error {
-	if args == nil {
-		return errors.New("nil args")
+// start a thread that listens for RPCs from worker.go
+func (c *Coordinator) server(sockname string) {
+	err := rpc.Register(c)
+	if err != nil {
+		log.Fatalf("Cannot register server %v", err)
 	}
-	if reply == nil {
-		return errors.New("nil reply")
+	rpc.HandleHTTP()
+	os.Remove(sockname)
+	l, err := net.Listen("unix", sockname)
+	if err != nil {
+		log.Fatalf("listen error %s: %v", sockname, err)
 	}
-
-	return nil
+	go func() {
+		err := http.Serve(l, nil)
+		if err != nil {
+		log.Printf("Cannot serve http %v", err)
+		}
+	}()
 }
 
 // create a Coordinator.
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
 func MakeCoordinator(sockname string, files []string, nReduce int) *Coordinator {
-	c := Coordinator{}
-	c.currentPhase = PhaseMap
-	c.timeoutPolicy = TIMEOUT
-	c.nReduce = nReduce
-	for i := range files {
-		mapTask := &Task{
-			ID:        i,
-			TaskType:  TaskMap,
-			FileName:  files[i],
-			State:     Idle,
-			StartTime: time.Time{},
-			Version:   0,
-		}
-		c.mapTasks = append(c.mapTasks, *mapTask)
+
+	lenFiles := len(files)
+
+	c := Coordinator{
+		nMap: lenFiles,
+		nReduce: nReduce,
+		mapTasks: make([]Task, lenFiles),
+		reduceTasks: make([]Task, nReduce),
 	}
-	// Your code here.
+
+	for i := 0; i < lenFiles; i++ {
+		c.mapTasks[i] = Task{
+			ID: i,
+			State: Idle,
+			FileName: files[i],
+			TaskType: TaskMap,
+		}
+	}
+
+	for i := 0; i < nReduce; i++ {
+		c.reduceTasks[i] = Task {
+			ID: i,
+			State: Idle,
+			TaskType: TaskReduce,
+		}
+	}
 
 	c.server(sockname)
 	return &c

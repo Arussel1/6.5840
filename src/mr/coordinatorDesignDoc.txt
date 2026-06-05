@@ -2,7 +2,7 @@ v2 because v1 is not enough so I throw it away
 Master 
 
 
-What is inside ?
+What is inside ? - DONE
 
 mu (one mutex)
 nReduce (R), nMap (M)
@@ -11,14 +11,14 @@ reduceTasks[R]: {state, workerId, startTime, attempt}
 
 Main mission:
 
-METHOD: Answer RPC (req, rep) -> error
+METHOD: Answer RPC (req, rep) -> error -  DONE
 Answer question from worker, if worker ask for task, if possible, give a task to them, if not, then tell them it is not possible
 map task check first, if there is map task -> assign it to worker
 else move on to reduce task, repeat as above
 else return not possible
 
 
-METHOD: Lease control RPC (req,rep) -> error
+METHOD: Lease control RPC (req,rep) -> error - OPTIONAL for now ? Maybe later
 Start a timer from now
 Before 15 seconds went
 If tasked is completed
@@ -29,7 +29,7 @@ if task type:
 if task is map -> nMap -=1 
 else -> nReduce -=1 
 
-METHOD: server RPC? (string) -> error ? (should always return an error tho, isn't it) 
+METHOD: server RPC? (string) -> error ? - DONE
 Register MASTER as an rpc handlers 
 Mount rpc to HTTP methods and paths
 Remove socket from OS to mount the same port
@@ -37,17 +37,17 @@ Mount a new "unix" port with sockname in input
 if error -> call error, else serve http traffic
 
 
-METHOD: Done () -> bool
+METHOD: Done () -> bool - DONE
 Lock master (defer Unlock)
 if nReduce == 0 return true
 else, return false
 
-METHOD: master constructor (files, nReduce) -> a pointer to Master
+METHOD: master constructor (files, nReduce) -> a pointer to Master - DONE
 Create a empty Master
 create map tasks list: empty for now, length is length of files
 create reduce tasks list: empty for now, length is nReduce (demonstrate how many reduce bucket)
 Create lock with mutex
-nMap = len(files), account for map remain
+nMap = len(files), account for map 
 nReduce = nReduce, account for buckets
 
 loop throughs file, for each file
