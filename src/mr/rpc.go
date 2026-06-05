@@ -24,6 +24,24 @@ type ExampleReply struct {
 	Y int
 }
 
+type Status int
+
+const (
+	Idle Status = iota
+	InProgress
+	Completed
+)
+
+type TaskType int
+
+const (
+	TaskMap TaskType = iota
+	TaskReduce
+	TaskWait
+	TaskExit
+)
+
+
 type Task struct {
 	mu 	sync.Mutex
 	ID        int
@@ -36,49 +54,30 @@ type Task struct {
 }
 
 const TIMEOUT = 15 * time.Second
-const (
-	Idle Status = iota
-	InProgress
-	Completed
-)
-
-type IntermediateTaskPointer struct {
-	workerAddr string
-	fileId int
-	attempt int
-}
-
 
 
 // Add your RPC definitions here.
-type Status int
-type TaskType int
 
-const (
-	TaskMap TaskType = iota
-	TaskReduce
-	TaskWait
-	TaskExit
-)
 
-type RequestTaskArgs struct {
-	WorkerID int
-}
 
-type RequestTaskReply struct {
-	TaskID   int
+
+type AskTaskArgs struct {}
+
+type AskTaskReply struct {
 	TaskType TaskType
-	FileName string
-	NMap     int
-	NReduce  int
-	Version  int
+	TaskID int
+	Filename string
+	TaskIndex int 
+	NReduce int 
+	NMap int
+	Version int
 }
+
 
 type ReportTaskDoneArgs struct {
 	TaskType TaskType
 	TaskID   int
 	Version  int
-	WorkerID int
 }
 
 type ReportTaskDoneReply struct {
