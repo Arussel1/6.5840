@@ -76,6 +76,7 @@ func executeMap(
             log.Printf("Close file: %v", err)
             return false
         }
+		
 
         newName := fmt.Sprintf("mr-%d-%d", MapIndex, i)
 
@@ -201,7 +202,6 @@ func Worker(
             log.Printf("Worker exit")
             return
         }
-
         switch askReply.TaskType {
         case TaskWait:
             time.Sleep(time.Second)
@@ -210,11 +210,12 @@ func Worker(
             return
 
         case TaskMap:
-            ok := executeMap(mapf, askReply.Filename, askReply.NReduce, askReply.TaskIndex)
+            ok := executeMap(mapf, askReply.Filename, askReply.NReduce, askReply.TaskID)
             if ok {
+				
                 reportDoneArgs := ReportTaskDoneArgs{
                     TaskType: TaskMap,
-                    TaskID:   askReply.TaskIndex,
+                    TaskID:   askReply.TaskID,
                     Version:  askReply.Version,
                 }
                 reportDoneReply := ReportTaskDoneReply{}
@@ -223,11 +224,11 @@ func Worker(
             }
 
         case TaskReduce:
-            ok := executeReduce(reducef, askReply.TaskIndex, askReply.NMap)
+            ok := executeReduce(reducef, askReply.TaskID, askReply.NMap)
             if ok {
                 reportDoneArgs := ReportTaskDoneArgs{
                     TaskType: TaskReduce,
-                    TaskID:   askReply.TaskIndex,
+                    TaskID:   askReply.TaskID,
                     Version:  askReply.Version,
                 }
                 reportDoneReply := ReportTaskDoneReply{}

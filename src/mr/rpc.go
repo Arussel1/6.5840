@@ -53,7 +53,7 @@ type Task struct {
 	WorkerID int
 }
 
-const TIMEOUT = 15 * time.Second
+const TIMEOUT = 10 * time.Second
 
 
 // Add your RPC definitions here.
@@ -67,7 +67,6 @@ type AskTaskReply struct {
 	TaskType TaskType
 	TaskID int
 	Filename string
-	TaskIndex int 
 	NReduce int 
 	NMap int
 	Version int
